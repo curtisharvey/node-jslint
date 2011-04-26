@@ -1,73 +1,69 @@
 #!/usr/bin/env node
-// jslint wrapper for nodejs
-// Adapted from rhino.js. Copyright 2002 Douglas Crockford
-// Shebang removal regex uses insecure "."
-// JSLINT is provided by fulljslint.js modified to export the global
 
-(function (files) {
-    var e, i, input, len, e_num,
-        batch = (files.length > 1),
-        exit_code = 0,
-        sys = require("sys"),
-        fs = require("fs"),
-        jslint = require("../lib/fulljslint_export").JSLINT,
-        jslint_options = {
-            predef: [
-                // CommonJS
-                "exports",
-                // YUI
-                "YUI",
-                "YAHOO",
-                "YAHOO_config",
-                "YUI_config",
-                "Y",
-                // NodeJS
-                "GLOBAL",
-                "process",
-                "require",
-                "__filename",
-                "module"
-            ]
-        };
+var linter = require("../lib/linter");
+var reporter = require("../lib/reporter");
+var nopt = require("nopt");
+var fs = require("fs");
 
-    if (!files.length) {
-        sys.puts("Usage: jslint file.js [file2.js]");
-        process.exit(1);
-    }
+function commandOptions () {
+    var flags = [
+        'adsafe', 'bitwise', 'browser', 'cap', 'continue', 'css',
+        'debug', 'devel', 'es5', 'evil', 'forin', 'fragment',
+        'newcap', 'node', 'nomen', 'on', 'onevar', 'passfail',
+        'plusplus', 'regexp', 'rhino', 'undef', 'safe', 'windows',
+        'strict', 'sub', 'white', 'widget', 'goodparts', 'json'
+    ];
 
-    files.forEach(function(file) {
-        try {
-            input = fs.readFileSync(file, "utf8");
-        } catch (err) {
-            sys.puts("ERROR: Couldn't open file '" + file + "'.");
-            exit_code += 1;
-            return;
-        }
+    var commandOpts = {
+        'indent' : Number,
+        'maxerr' : Number,
+        'maxlen' : Number,
+        'predef' : [String, null]
+    };
 
-        // remove shebang (lifted from node.js)
-        input = input.replace(/^\#\!.*/, "");
-
-        if (jslint(input, jslint_options)) {
-            sys.puts("OK" + (batch ? ": " + file : ""));
-        } else {
-            if (batch) { sys.puts("FAIL: " + file); }
-            exit_code += 1;
-            i = 0;
-            len = jslint.errors.length;
-            for (i=0; i<len; i++) {
-                e = jslint.errors[i];
-                if (e) {
-                    e_num = (i + 1) + " ";
-                    while (e_num.length < 4) {
-                        e_num = " " + e_num;
-                    }
-                    sys.puts(e_num + e.line + "," + e.character + ": " + e.reason);
-                    sys.puts("    " + (e.evidence || "").replace(/^\s+|\s+$/, ""));
-                }
-            }
-        }
+    flags.forEach(function (option) {
+        commandOpts[option] = Boolean;
     });
 
-    process.exit(exit_code);
+    return commandOpts;
+}
 
-}(process.argv.slice(2)));
+var options = commandOptions(),
+    shorthandOptions = {
+        "good" : ["--goodparts"],
+        "gp" : ["--goodparts"]
+    },
+    shorthands = Object.keys(shorthandOptions);
+
+var parsed = nopt(options, shorthandOptions);
+
+function die(why) {
+    console.warn(why);
+    console.warn("Usage: " + process.argv[1] +
+        " [--" + Object.keys(options).join("] [--") +
+        "] [-" + shorthands.join("] [-") +
+        "] <scriptfile>...");
+    process.exit(1);
+}
+
+if (!parsed.argv.remain.length) {
+    die("No files specified.");
+}
+
+function lintFile(file) {
+    fs.readFile(file, function (err, data) {
+        if (err) {
+            throw err;
+        }
+        data = data.toString("utf8");
+        var lint = linter.lint(data, parsed);
+        if (parsed.json) {
+            console.log(JSON.stringify([file, lint]));
+        } else {
+            reporter.report(file, lint);
+        }
+    });
+    // TODO process.exit with correct return value
+}
+
+parsed.argv.remain.forEach(lintFile);
