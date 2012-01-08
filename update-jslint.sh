@@ -13,5 +13,4 @@ else
     exit 1;
 fi
 
-$fetch_cmd "$out" "$src" &&
-    echo "\n// export for node-jslint\nmodule.exports = JSLINT;" >> "$out"
+$fetch_cmd "$out" "$src"
